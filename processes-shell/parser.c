@@ -5,9 +5,13 @@
 
 #include "parser.h"
 
-int parse_single_command(char* const pa_input, char** argv_buffer_out)
+int parse_single_command(char* const pa_input, char*** argv_buffer_out, char** file_name_out)
 {
     size_t argument_array_size = 0;
+    char** argv_buffer = *argv_buffer_out;
+    // argv_buffer_out은 포인터 배열의 주소.
+    // type** address , *address -> type* arr => arr[0] = (type) el 어레이 0번째에 기록함
+    // type을 char*로 바꾸면 내가생각하는게 맞겠지?
     
     char* p_input = pa_input; // 이 포인터를 옮겨가면서, 구분자 만나거나 널캐릭터로 바꾸고, 위의 스트링 포인터가 제대로 널캐릭터 종료가 될 . 수있도록 한다
     char* input_argument_token = p_input; // 이걸 배열에 담을거야
@@ -34,7 +38,7 @@ int parse_single_command(char* const pa_input, char** argv_buffer_out)
         else {
             // 이상한 캐릭터가 아니고 커맨드로 간주될 캐릭터들
             if (save_token) {
-                argv_buffer_out[argument_array_size++] = input_argument_token;
+                argv_buffer[argument_array_size++] = input_argument_token;
                 save_token = false;
             }
         }
@@ -43,7 +47,7 @@ int parse_single_command(char* const pa_input, char** argv_buffer_out)
     }
 
     assert (argument_array_size <= ARGUMENT_VECTOR_BUFFER_SIZE);
-    argv_buffer_out[argument_array_size++] = NULL; // should be NULL terminated;
+    argv_buffer[argument_array_size++] = NULL; // should be NULL terminated;
 
     if (file_name_token_index != -1) {
         /*
@@ -56,17 +60,18 @@ int parse_single_command(char* const pa_input, char** argv_buffer_out)
         // wrong input,
         return PARSER_STATUS_INVALID_INPUT;
         }
-        argv_buffer_out[file_name_token_index] = NULL; // 파일이름은 내가 알아서 리디렉션 잘 해주고, 커맨드에서는 뺀다.
+        *file_name_out = argv_buffer[file_name_token_index];
+        argv_buffer[file_name_token_index] = NULL;
         --argument_array_size;
     }        
     // parse end argv_buffer는 이제 잘 들어가는디
     for (size_t i = 0; i < argument_array_size - 1; ++i) {
-        assert(*argv_buffer_out[i] != '\0' && argv_buffer_out[i] != NULL);
-        printf("%s\n", argv_buffer_out[i]);
+        assert(*argv_buffer[i] != '\0' && argv_buffer[i] != NULL);
+        printf("%s\n", argv_buffer[i]);
     }
 
     if (*p_input == '\0') {
-        // strsep이 &를 널캐릭터로 바꿨을 것이므로
+        // strsep이 &
         return PARSER_STATUS_COMMAND_REMAINING;
     } else {
         return PARSER_STATUS_PARSE_COMPLETE;
