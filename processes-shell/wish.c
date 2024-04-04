@@ -5,7 +5,8 @@
 #include <assert.h>
 #include <sys/stat.h> 
 #include <unistd.h>
-#include "app.h"
+
+#include "parser.h"
 
 #define ARGUMENT_VECTOR_BUFFER_SIZE (512)
 #define INPUT_BUFFER_SIZE (10)
@@ -17,7 +18,7 @@ FILE* g_out_fd;
 FILE* g_err_fd;
 
 static char s_error_message[30] = "An error has occurred\n";
-static s_current_pa_input_buffer_index = 0;
+static int s_current_pa_input_buffer_index = 0;
 
 typedef enum {
     COMMAND_TYPE_BUILT_IN,
@@ -26,21 +27,46 @@ typedef enum {
 
 typedef struct {
     int child_pid; // -1이면 아직 시작 안한거
-    char* pa_input;
-    char* argv_buffer[ARGUMENT_VECTOR_BUFFER_SIZE];
+    char* pa_input; // 나중에 해제해야해..
+    char* argv_buffer[ARGUMENT_VECTOR_BUFFER_SIZE + 1];
     char* output_redirection_file_name; // NULL이면 리디렉션 안하는거임 ㅇㅋ?
     command_type_t command_type;
 } child_process_info_t;
 
 // 설계하지마라
+/*
+    - app.h
+    shell_init() -> fd init, mode init, argc check
+
+    - reader.h in app.h
+    size_t command_buffer_index = 0;
+    child_process_info_t command_buffer[20] = { NULL, };
+    read_commands(command_buffer, &command_buffer_index) -> getline ~ parse
+
+    - command_executor.h in app.h
+    for command : commands,
+        if built in, run built in functions
+        else fork and call execv
+    
+    - app.h
+    wait_child_processes(command_buffer);
+        waitpid(pid, WNOHANG);
+        while(true) listen to EOF from stdin if interactive
+        if child process is interrupted, return -1;
+
+    - app.h
+    free_resources(command_buffer);
+        using pid, if child process is running, kill it
+        free all resources.
+
+
+*/
 
 int main(int argc, char* argv[])
 {
     g_in_fd = stdin;
     g_out_fd = stdout;
     g_err_fd = stderr;
-    char* pa_input_buffer[INPUT_BUFFER_SIZE] = { 0, }; // TODO : parallel 나중에 구현하자..
-
     char* pa_input = malloc(INITIAL_PA_INPUT_SIZE * sizeof(char));
     size_t input_capacity = 0;
     bool interactive_mode = false;
@@ -66,7 +92,9 @@ int main(int argc, char* argv[])
         if (interactive_mode) {
             printf("wish> ");
         }
-        int input_size = getdelim(&pa_input, &input_capacity, g_in_fd, "\n&"); // TODO : 커맨드 버퍼 여러개 만들어서 &도 처리하기 여기서도 반복문 돌려야할듯?
+
+        // if batch file has commands with new line, this could be multiple vusdf
+        int input_size = getline(&pa_input, &input_capacity, g_in_fd); // TODO : &를 아래서 처리하기.
         if (input_size == -1) {
             // listen to EOF signal(ctrl + d)
             // if (exit_signal) exit_handler();, exit child process if there is and comeback to shell's new loop
@@ -74,81 +102,60 @@ int main(int argc, char* argv[])
             goto exit_shell;
         }
 
-        // parse
-            // parse pa_input and to some 2D array (may be multiple commands)
-                // parse
-                // if fail, clear resources and continue; loop
-        size_t  argument_array_size = 0;
-        char* argv_buffer[ARGUMENT_VECTOR_BUFFER_SIZE + 1]; // 내가 수동으로 포인터 옮겨가면서 스트링 포인터 담을거임
-        
-        char* p_input = pa_input; // 이 포인터를 옮겨가면서, 구분자 만나거나 널캐릭터로 바꾸고, 위의 스트링 포인터가 제대로 널캐릭터 종료가 될 . 수있도록 한다
-        char* input_argument_token = p_input; // 이걸 배열에 담을거야
-
-        bool save_token = false;
-        size_t file_name_token_index = -1;//널캐릭터까지 읽을려고 사이즈 + 1 (포문 말하는거임 ㅎㅎ)
-        for (size_t input_index = 0; input_index < input_size + 1; ++input_index) {
-            if (*p_input == ' ' || *p_input == '\t' || *p_input == '&') {
-                *p_input = '\0'; // 토큰 스트링이 널종료되어서 정상적으로 읽히도록.
-                // 근데 만약에.. 다음에 구분자가 있거나 입력 종료면? 지금 하면 안된다...
-                input_argument_token = p_input + 1; // 구분자를 만났으면, 다음단어의 시작은 이 포인터 다음이겠지?, p_input이 움직이면서 널종료 해줄거야
-                save_token = true; // 이 플래그가 찍힌 다음에, 커맨드로 간주되는 캐릭터가 나오면 그때 저장하면 됨
+        char* pa_input_copy = pa_input;
+        char* command = strsep(pa_input_copy, "&");
+        while (command != NULL) {
+            char* argv_buffer[ARGUMENT_VECTOR_BUFFER_SIZE + 1] = { NULL, };
+            parser_status_t parser_state = parse_single_command(command, argv_buffer);
+            if (parser_state == PARSER_STATUS_INVALID_INPUT) {
+                goto error;
+            } else if (parser_state == PARSER_STATUS_COMMAND_REMAINING) {
+                // save argv to somewhere else
+            } else {
+                // completed, exit!
             }
-            else if (*p_input == '>') {
-                *p_input = '\0'; // > 리디렉션을 받았으면, 커맨드에 남겨두지 않고 그냥 stdin stdout 리디렉션동작만 해주면된다.
-                input_argument_token = p_input + 1;
-                file_name_token_index = argument_array_size; // current argument vector buffer index, file name token will be placed in this index when save token tiggered
-                save_token = true;
-            }
-            else if (*p_input == '\0' || *p_input == EOF) {
-                break; // 다읽었다.
-            }
-            else {
-                // 이상한 캐릭터가 아니고 커맨드로 간주될 캐릭터들
-                if (save_token) {
-                    argv_buffer[argument_array_size++] = input_argument_token;
-                    save_token = false;
-                }
-            }
-
-            ++p_input;
+            
+            // TODO : argv_buffer확인해서 빌트인 커맨드 핸들링..
+            command = strsep(pa_input_copy, "&");
         }
-        *p_input = '\0'; // 마지막에 읽은 단어가 터지지않도록..
 
-        assert (argument_array_size <= ARGUMENT_VECTOR_BUFFER_SIZE);
-        argv_buffer[argument_array_size++] = NULL; // should be NULL terminated;
 
-        if (file_name_token_index != -1) {
-            /*
-            리디렉션 지시자를 읽어서 파일이름이 저장되었다는 뜻. 규약상 이 파일 이름이 아규먼트 벡터 버퍼의 마지막 (널 종료를 제외한) 요소가 되어야 한다.
-            하지만, 아규먼트 벡터 버퍼의 크기가 이 인덱스보다 2 초과라면, 잘못된 입력이므로 에러메세지 출력 후 종료
-            [..., 파일이름, NULL]로 아규먼트 벡터 버퍼가 정상적으로 저장되었다면, 파일 이름 요소를 그냥 NULL로 바꿔버리면 올바른 커맨드가 된다.
-            -> [..., NULL, NULL]
-            */
-           if (argument_array_size > file_name_token_index + 2) {
-            // wrong input,
-            goto error;
-           }
-            argv_buffer[file_name_token_index] = NULL; // 파일이름은 내가 알아서 리디렉션 잘 해주고, 커맨드에서는 뺀다.
-            --argument_array_size;
-        }        
-        // parse end
-        for (size_t i = 0; i < argument_array_size - 1; ++i) {
-            assert(*argv_buffer[i] != '\0' && *argv_buffer[i] != NULL);
-        }
+
+
 
         // 이제 argv 버퍼에 커맨드들을 의미하는 char*들이 배열안에 잘 들어가 있을 것임.
             // argv[0]이 빌트인이면, 빌트인 핸들러로
                 // TODO : path 면 path 관리해야됨
             // 아니라면, execv using path
             // 함수화만 잘하면.. 끝날듯합니다.
-        
-        int child_pid = execv("./", argv_buffer);
+
+        // fork먼저 해야지
+        // TODO : execv path argument에 "path/%s", argv[0] 이딴식으로 해야함
+        char* path = "/bin/";
+        char* program = argv_buffer[0];
+        int command_length = strlen(path) + strlen(program);
+        char* run_path = malloc(command_length * sizeof(char) + 1);
+        sprintf(run_path, "%s%s", path, program);
+
+        int child_pid = fork();
         if (child_pid == -1) {
             goto error;
+        } else if (child_pid == 0) {
+            // child process
+            
+            int no_return = execv(run_path, argv_buffer);
+            printf("wtf\n");
+            if (no_return == -1) {
+                // child process failed;
+                goto error;
+            }
         }
+        // parent process
 
         int status;
-        pid_t exit_status = waitpid(&child_pid, &status, WNOHANG); // non blocking
+        pid_t exit_status = waitpid(child_pid, &status, WNOHANG); // non blocking
+        // TODO : use while to listen EOF. if EOF is heard, break out of while loop.
+
         // TODO : 자식 프로세스 관련 struct만들어서, 배열에 넣고관리하자...
 
 
@@ -176,7 +183,7 @@ int main(int argc, char* argv[])
 
 
 
-
+        // should free all resources at this point.
     }
 
 error:
