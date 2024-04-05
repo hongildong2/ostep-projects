@@ -5,19 +5,16 @@
 
 #include "parser.h"
 
-int parse_single_command(char* const pa_input, char*** argv_buffer_out, char** file_name_out)
+int parse_single_command(const char* const pa_input, command_info_t* command_info_out)
 {
-    size_t argument_array_size = 0;
-    char** argv_buffer = *argv_buffer_out;
-    // argv_buffer_out은 포인터 배열의 주소.
-    // type** address , *address -> type* arr => arr[0] = (type) el 어레이 0번째에 기록함
-    // type을 char*로 바꾸면 내가생각하는게 맞겠지?
+    size_t argv_size = 0;
+    char** argv_buffer = command_info_out->argv_buffer;
     
     char* p_input = pa_input; // 이 포인터를 옮겨가면서, 구분자 만나거나 널캐릭터로 바꾸고, 위의 스트링 포인터가 제대로 널캐릭터 종료가 될 . 수있도록 한다
     char* input_argument_token = p_input; // 이걸 배열에 담을거야
 
     bool save_token = true;
-    size_t file_name_token_index = -1;//널캐릭터까지 읽을려고 사이즈 + 1 (포문 말하는거임 ㅎㅎ)
+    size_t file_name_token_index = -1;
     while (*p_input != '\0' && *p_input != EOF && *p_input != '&') {
         if (*p_input == ' ' || *p_input == '\t' || *p_input == '\n') {
             *p_input = '\0'; // 토큰 스트링이 널종료되어서 정상적으로 읽히도록.
@@ -30,15 +27,15 @@ int parse_single_command(char* const pa_input, char*** argv_buffer_out, char** f
                 // 인풋파일이 여러개? ㄴㄴ 안됨
                 return PARSER_STATUS_INVALID_INPUT;
             }
-            *p_input = '\0'; // > 리디렉션을 받았으면, 커맨드에 남겨두지 않고 그냥 stdin stdout 리디렉션동작만 해주면된다.
+            *p_input = '\0'; // '>' 리디렉션을 받았으면, '>'를 커맨드에 남겨두지 않고 그냥 stdin stdout 리디렉션동작만 해주면된다.
             input_argument_token = p_input + 1;
-            file_name_token_index = argument_array_size; // current argument vector buffer index, file name token will be placed in this index when save token tiggered
+            file_name_token_index = argv_size; // current argument vector buffer index, file name token will be placed in this index when save token tiggered
             save_token = true;
         }
         else {
             // 이상한 캐릭터가 아니고 커맨드로 간주될 캐릭터들
             if (save_token) {
-                argv_buffer[argument_array_size++] = input_argument_token;
+                argv_buffer[argv_size++] = input_argument_token;
                 save_token = false;
             }
         }
@@ -46,9 +43,9 @@ int parse_single_command(char* const pa_input, char*** argv_buffer_out, char** f
         ++p_input;
     }
 
-    assert (argument_array_size <= ARGUMENT_VECTOR_BUFFER_SIZE);
-    argv_buffer[argument_array_size++] = NULL; // should be NULL terminated;
-
+    assert (argv_size <= ARGUMENT_VECTOR_BUFFER_SIZE);
+    argv_buffer[argv_size++] = NULL; // should be NULL terminated;
+     
     if (file_name_token_index != -1) {
         /*
         리디렉션 지시자를 읽어서 파일이름이 저장되었다는 뜻. 규약상 이 파일 이름이 아규먼트 벡터 버퍼의 마지막 (널 종료를 제외한) 요소가 되어야 한다.
@@ -56,16 +53,21 @@ int parse_single_command(char* const pa_input, char*** argv_buffer_out, char** f
         [..., 파일이름, NULL]로 아규먼트 벡터 버퍼가 정상적으로 저장되었다면, 파일 이름 요소를 그냥 NULL로 바꿔버리면 올바른 커맨드가 된다.
         -> [..., NULL, NULL]
         */
-        if (argument_array_size > file_name_token_index + 2) {
+        if (argv_size > file_name_token_index + 2) {
         // wrong input,
         return PARSER_STATUS_INVALID_INPUT;
         }
-        *file_name_out = argv_buffer[file_name_token_index];
+        command_info_out->output_redirection_file_name = argv_buffer[file_name_token_index];
         argv_buffer[file_name_token_index] = NULL;
-        --argument_array_size;
-    }        
+        --argv_size;
+    } else {
+        command_info_out->output_redirection_file_name = NULL;
+    }
+
+    // input validation completed?
+
     // parse end argv_buffer는 이제 잘 들어가는디
-    for (size_t i = 0; i < argument_array_size - 1; ++i) {
+    for (size_t i = 0; i < argv_size - 1; ++i) {
         assert(*argv_buffer[i] != '\0' && argv_buffer[i] != NULL);
         printf("%s\n", argv_buffer[i]);
     }

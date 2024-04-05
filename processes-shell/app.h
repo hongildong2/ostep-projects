@@ -6,11 +6,21 @@
 
 #include "libs.h"
 #include "command_executor.h"
+#include "reader.h"
+
+extern FILE* g_in_fd;
+extern FILE* g_out_fd;
+extern FILE* g_err_fd;
+extern bool g_interactive_mode;
 
 
 int shell_init(int argc, char* argv[]);
 
-// TODO : path malloc제거하는 함수 추가
+void set_path(char** seperated_paths);
+
+const char** const get_paths();
+
+void error_handler();
 
 static const char* const s_error_message = "An error has occurred\n";
 

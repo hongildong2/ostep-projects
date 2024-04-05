@@ -15,17 +15,18 @@ int read_commands()
     }
 
     char* pa_input_copy = pa_input;
-    char* command = strsep(pa_input_copy, "&");
+    char* command = strsep(&pa_input_copy, "&");
     while (command != NULL) {
         if (add_command(command) == false) {
-            // TODO : ㅅㅂ 뭘해야함
+            goto read_fail;
         }
-        command = strsep(pa_input_copy, "&");
+        command = strsep(&pa_input_copy, "&");
     }
     return 1;
     read_fail:
         if (pa_input != NULL) {
             free(pa_input);
+            pa_input = NULL;
         }
         return -1;
 }

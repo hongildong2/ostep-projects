@@ -8,6 +8,11 @@
 
 #include "app.h"
 
+FILE* g_in_fd;
+FILE* g_out_fd;
+FILE* g_err_fd;
+bool g_interactive_mode;
+
 // 설계하지마라
 /*
     - app.h
@@ -40,7 +45,7 @@
 int main(int argc, char* argv[])
 {    
     if ((shell_init(argc, argv)) == -1) {
-        goto error;
+        error_handler();
     }
 
     while(true) {
@@ -49,22 +54,22 @@ int main(int argc, char* argv[])
         }
 
         if (read_commands() == -1) {
-            goto error;
+            error_handler();
         }
+        // 이 위까진 테스트 완료..
 
-        run_commands();
+        // run_commands();
         
-        while (is_commands_done() == false) {
+        //while (is_commands_done() == false) {
             // listen to EOF input from stdin, then break;    
-        }
+        // }
 
-        clear_command_buffer();
+        // clear_command_buffer();
     }
 
-error:
-    fprintf(g_err_fd, "%s", s_error_message);
-    exit(-1);
-exit_shell:
+
+
+    // clear resources
     if (g_interactive_mode == false) {
         if (g_in_fd != NULL && g_in_fd != stdin) {
             // close(g_in_fd); // how to handle this?? i am exiting anyway

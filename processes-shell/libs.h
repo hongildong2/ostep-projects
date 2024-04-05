@@ -2,6 +2,7 @@
 #define LIBS_H
 
 #include <stdio.h>
+#include <stdbool.h>
 
 #define ARGUMENT_VECTOR_BUFFER_SIZE (512)
 #define INPUT_BUFFER_SIZE (10)
@@ -19,20 +20,13 @@ typedef enum {
 } command_type_t;
 
 typedef struct {
+    int pid;
+    pid_t status;
     char* pa_input; // 나중에 해제해야해..
     char* argv_buffer[ARGUMENT_VECTOR_BUFFER_SIZE + 1];
     char* output_redirection_file_name; // if null, no redireciton, freed when pa_input is freed
     command_type_t command_type;
 } command_info_t;
 
-typedef struct {
-    int pid;
-    int status;
-} process_info_t;
-
-FILE* g_in_fd;
-FILE* g_out_fd;
-FILE* g_err_fd;
-bool g_interactive_mode;
 
 #endif /* LIBS_H */
