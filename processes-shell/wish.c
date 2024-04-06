@@ -7,6 +7,9 @@
 #include <unistd.h>
 
 #include "app.h"
+#include "command_executor.h"
+#include "parser.h"
+#include "reader.h"
 
 FILE* g_in_fd;
 FILE* g_out_fd;
@@ -53,27 +56,34 @@ int main(int argc, char* argv[])
             printf("wish> ");
         }
 
-        if (read_commands() == -1) {
+        int read_result = read_commands();
+        if (read_result == -1) {
             error_handler();
+        } else if (read_result == 2) {
+            // void \n input
+            continue;
         }
-        // 이 위까진 테스트 완료..
 
-        // run_commands();
         
-        //while (is_commands_done() == false) {
-            // listen to EOF input from stdin, then break;    
-        // }
-
-        // clear_command_buffer();
-    }
+        run_commands();        
 
 
-
-    // clear resources
-    if (g_interactive_mode == false) {
-        if (g_in_fd != NULL && g_in_fd != stdin) {
-            // close(g_in_fd); // how to handle this?? i am exiting anyway
+        // if EOF came in, this while will be breaken out.
+        while (is_commands_done() == false ) {
+            // if (feof(stdin) != 0) {
+            //     clearerr(stdin);
+            //     kill_all();
+            // }
         }
+
+        if (g_in_fd != stdin) {
+            break;
+        }
+        clear_command_buffer();
+        clear_reader_buffer();
     }
+
+    clear_command_buffer();
+    clear_reader_buffer();
     return 0;
 }

@@ -18,10 +18,8 @@ int shell_init(int argc, char* argv[]);
 
 void set_path(char** seperated_paths);
 
-const char** const get_paths();
+char** get_paths();
 
 void error_handler();
-
-static const char* const s_error_message = "An error has occurred\n";
 
 #endif /* APP_H */

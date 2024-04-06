@@ -15,4 +15,6 @@ extern bool g_interactive_mode;
 
 int read_commands();
 
+void clear_reader_buffer();
+
 #endif /* READER_H */

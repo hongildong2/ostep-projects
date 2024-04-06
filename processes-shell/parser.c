@@ -2,14 +2,16 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "parser.h"
 
-int parse_single_command(const char* const pa_input, command_info_t* command_info_out)
+int parse_single_command(char* const pa_input, command_info_t* command_info_out)
 {
     size_t argv_size = 0;
     char** argv_buffer = command_info_out->argv_buffer;
     
+    // 흠...
     char* p_input = pa_input; // 이 포인터를 옮겨가면서, 구분자 만나거나 널캐릭터로 바꾸고, 위의 스트링 포인터가 제대로 널캐릭터 종료가 될 . 수있도록 한다
     char* input_argument_token = p_input; // 이걸 배열에 담을거야
 
@@ -54,24 +56,23 @@ int parse_single_command(const char* const pa_input, command_info_t* command_inf
         -> [..., NULL, NULL]
         */
         if (argv_size > file_name_token_index + 2) {
-        // wrong input,
-        return PARSER_STATUS_INVALID_INPUT;
+            // wrong input, file name should be single
+            return PARSER_STATUS_INVALID_INPUT;
         }
         command_info_out->output_redirection_file_name = argv_buffer[file_name_token_index];
         argv_buffer[file_name_token_index] = NULL;
         --argv_size;
     } else {
+        // no redirection specifier came
         command_info_out->output_redirection_file_name = NULL;
     }
+    
+
+    command_info_out->argc = argv_size - 1; // NULL terminated 제외하고 기록
 
     // input validation completed?
 
     // parse end argv_buffer는 이제 잘 들어가는디
-    for (size_t i = 0; i < argv_size - 1; ++i) {
-        assert(*argv_buffer[i] != '\0' && argv_buffer[i] != NULL);
-        printf("%s\n", argv_buffer[i]);
-    }
-
     if (*p_input == '\0') {
         // strsep이 &
         return PARSER_STATUS_COMMAND_REMAINING;

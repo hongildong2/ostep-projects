@@ -1,14 +1,11 @@
 #include "app.h"
+#include "command_executor.h"
+#include "reader.h"
 
-static char* paths[1024] = { NULL, };
+#define PATHS_BUFFER_SIZE (1024)
 
-void error_handler()
-{
-    // TODO : clear all resources if possible,
-    // TODO : kill all child process if possible
-    fprintf(g_err_fd, "%s", s_error_message);
-    exit(1);
-}
+static char* paths[PATHS_BUFFER_SIZE] = { NULL, };
+static const char* const s_error_message = "An error has occurred\n";
 
 int shell_init(int argc, char* argv[])
 {   
@@ -44,16 +41,20 @@ void set_path(char** seperated_paths)
 {
     // clear original paths[]
     size_t paths_idx = 0;
-    while (paths[paths_idx] != NULL) {
+    while (paths[paths_idx] != NULL && paths_idx < PATHS_BUFFER_SIZE) {
         if (paths[paths_idx] != NULL) {
             free(paths[paths_idx]);
             paths[paths_idx] = NULL;
         }
     }
 
+    if (seperated_paths == NULL) {
+        return;
+    }
+
     // 괜히 원본 포인터 유지하려다가 귀찮아질수도 있으니까, strcpy해서 여기서 들고있자.
     paths_idx = 0;
-    while (*seperated_paths != NULL) {
+    while (*seperated_paths != NULL && paths_idx < PATHS_BUFFER_SIZE) {
         char* original = *seperated_paths;
         size_t original_string_length = strlen(original);
 
@@ -63,18 +64,21 @@ void set_path(char** seperated_paths)
         
 
         copy[original_string_length] = '\0';
-        printf("new path %s set\n", copy);
         paths[paths_idx++] = copy;
 
 
         seperated_paths++;
     }
-
-    
 }
 
-const char** const get_paths()
+char** get_paths()
 {
     return paths;        
 }
 
+void error_handler()
+{
+    fprintf(g_err_fd, s_error_message);
+    clear_reader_buffer();
+    exit(-1);
+}
