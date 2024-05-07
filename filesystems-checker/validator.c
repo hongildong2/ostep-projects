@@ -1,16 +1,65 @@
+#include <assert.h>
+
 #include "validator.h"
 #include "explorer.h"
+#include "resource_manager.h"
 #include "stdbool.h"
+#include "types.h"
 
-static char fbn_bitmap[BSIZE];
+static char s_fbn_bitmap[BSIZE];
+static uint s_inode_refer_countmap[NINODES];
+
 // inode on traverse
  // 1 : validate type, 2 : validate address, 4 : validate dir, 5 : bitmap lookup, 10 : when dir, not valid inode
-int validate_inode(struct dinode* inode)
+int validate_inode(struct superblock* sb, struct dinode* inode)
 {
+    assert (sb != NULL && inode != NULL);
+    // 1. valid file type
+    {
+        if (inode->type != T_FILE && inode->type != T_DIR && inode->type != T_DEV) {
+            exit_on_failure("ERROR: bad inode.");
+        }
+    }
 
-    // 1
+    // 2. 0 < fbn < file block count
+    {
+        int fbn_count = sb->nblocks;
+        uint* addrs = inode->addrs;
+        
+        // direct check
+        while (*addrs != 0) {
+            if (*addrs <= 0 || *addrs >= fbn_count) {
+                exit_on_failure("ERROR: bad direct address in inode.");
+            }
+            addrs++;
+        }
 
-    // 2 inode start < inode < bitmap start
+        // indirect check
+        // look into inode size, i have to decide this file has INDIRECT fbns or not
+        // if inode->size is bigger than NDIRECT * BSIZE, THERE IS INDIRECT addrs
+        // ssibal
+        int indirect_count = inode->size / BSIZE - NDIRECT + 1;
+        if (indirect_count == 0) {
+            goto inode_fbn_check_done;
+        }
+
+        // for existing INDIRECTed fbns, check their fbn is valid as above.
+        for (int i = 0; i < indirect_count; ++i) {
+            uint indirects_fbn = addrs[i];
+            // fbn 가서 거기있는 fbn들도 순회 해야함
+            uint* indirected_fbns = fbn_to_user_address(indirects_fbn);
+            assert (indirected_fbns != NULL);
+            
+            while (*indirected_fbns != 0) {
+                if (*indirected_fbns <= 0 || *indirected_fbns >= fbn_count) {
+                    exit_on_failure("ERROR: bad indirect address in inode.");
+                }
+                indirected_fbns++;
+            }
+        }
+    }
+inode_fbn_check_done:
+
 
     // 4 if type==dir, check dir ent
 

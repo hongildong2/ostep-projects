@@ -10,6 +10,7 @@ typedef short ushort;
 #define T_FILE 2   // File
 #define T_DEV  3   // Device
 
+#define NINODES 200
 
 // params
 #define NPROC        64  // maximum number of processes

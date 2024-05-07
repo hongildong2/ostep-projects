@@ -8,6 +8,8 @@
 #include "explorer.h"
 #include "types.h"
 #include "validator.h"
+#include "queue.h"
+#include "resource_manager.h"
 
 
 int main(int argc, char* argv[])
@@ -20,21 +22,24 @@ int main(int argc, char* argv[])
     const char* const file_name = argv[1];
     int fd = open(file_name, O_RDONLY);
     if (fd == -1) {
-        goto error;
+        exit_on_failure("ERROR : INPUT FILE OPEN FAILED");
     }
+    register_fd(fd);
 
     // get file system size first for mapping
     uint fs_size;
     lseek(fd, BSIZE, SEEK_SET);
     if(read(fd, &fs_size, sizeof(uint)) < 0) {
-        goto error;
+        exit_on_failure("ERROR: INPUT FILE READ FAILED");
     }
 
     // mapping fs.img to my address space. Starting from superblock
     block_t* bp = mmap(0, BSIZE * fs_size, PROT_READ, MAP_PRIVATE, fd, 0);
     if (bp == MAP_FAILED) {
-        goto error;
+        exit_on_failure("ERROR: MMAP FAILED");
     }
+    register_mmap(bp, BSIZE * fs_size);
+    
 
     
     // 된다. 블록 진행시키면서 그냥 정보 뽑으면됨.
@@ -44,7 +49,7 @@ int main(int argc, char* argv[])
 
     block_t* initiated = init_explorer(bp, sb);
     if (initiated != bp) {
-        goto error;
+        exit_on_failure("ERROR: FS IMAGE IS INCONSISTENT WITH SUPERBLOCK DESCRIPTION");
     }
 
     // root inode number is 1, thus starting at disk location 0x00004040, 0x00004000 에는 inode 0번 자리인데 그런건 없음
@@ -56,7 +61,8 @@ int main(int argc, char* argv[])
     // TODO : root inode verification
     while (addrs->inum != 0) {
         // if ".", ".." continue
-        // if not ".", ".." => add inode number to queue
+
+        // TODO : if not ".", ".." => add inode number to queue for BFS
         addrs++;
     }
     // root verification done, start BFS
@@ -64,8 +70,8 @@ int main(int argc, char* argv[])
 
     // TODO : BFS on child inodes
 
-    while (!queue.empty()) {
-        uint inode_number = queue.pop();
+    while (!is_empty()) {
+        uint inode_number = dequeue();
         struct dinode* inode = inode_num_to_user_address(inode_number);
 
         validate_inode(inode);
@@ -77,7 +83,7 @@ int main(int argc, char* argv[])
             case T_DIR:
                 entries = (struct dirent**)inode->addrs;
                 while (*entries != NULL) {
-                    queue.add(*entries);
+                    enqueue((*entries)->inum);
                     mark_refer_countmap(*entries++);
                     // entries++;
                 }
@@ -96,7 +102,7 @@ int main(int argc, char* argv[])
     }
     
     // traverse inode sector and validate
-    validate_ref_count(int type, struct dinode *inode);
+    // validate_ref_count(int type, struct dinode *inode);
 
     
     // validate bitmap consistency
@@ -106,11 +112,7 @@ int main(int argc, char* argv[])
     // ??
     uint data_block_count = sb->nblocks;
     
-    
-error:
-    perror("error flag setted ");
-    if (fd != -1){
-        close(fd);
-    }
-    munmap((void*) bp, sizeof(block_t) * fs_size);
+  
+    release_resources();
+    return 0;
 }

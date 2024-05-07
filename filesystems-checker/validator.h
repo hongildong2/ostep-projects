@@ -5,7 +5,7 @@
 
 
 // inode on traverse
-int validate_inode(struct dinode* inode); // 1 : validate type, 2 : validate address, 4 : validate dir, 5 : bitmap lookup, 10 : when dir, not valid inode
+int validate_inode(struct superblock* sb, struct dinode* inode); // 1 : validate type, 2 : validate address, 4 : validate dir, 5 : bitmap lookup, 10 : when dir, not valid inode
 
 // when traverse inode
 int mark_fbn_bitmap(int fbn); // In this function, if already marked, violation 7

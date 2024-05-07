@@ -188,9 +188,14 @@ winode(uint inum, struct dinode *ip)
   struct dinode *dip;
 
   bn = IBLOCK(inum, sb);
-  rsect(bn, buf);
+  rsect(bn, buf); // buf에 기존 inode block 정보 읽기
+
+  // 작성할 inode number에 따른 inode block에서의 오프셋만큼 포인터 이동
   dip = ((struct dinode*)buf) + (inum % IPB);
+
+  // 오프셋된 포인터부터 작성할 inode 값복사 => 기존내용 + 새 inode
   *dip = *ip;
+  // 작성
   wsect(bn, buf);
 }
 
@@ -201,10 +206,19 @@ rinode(uint inum, struct dinode *ip)
   uint bn;
   struct dinode *dip;
 
+  // inode number에 따른 Block Number 가져오기
   bn = IBLOCK(inum, sb);
+
+  // Block 전체 데이터 buf로 char[BSIZE];
   rsect(bn, buf);
+
+  // buf 포인터를 inode num offset만큼 옮김
   dip = ((struct dinode*)buf) + (inum % IPB);
+
+  // ip에 값 복사. 
   *ip = *dip;
+
+  // 블록 전체 읽고 포인터를 오프셋만큼 옮겨서 원하는 inode number의 데이터를 읽게함
 }
 
 void
@@ -287,8 +301,12 @@ iappend(uint inum, void *xp, int n)
       }
       x = xint(indirect[fbn-NDIRECT]);
     }
+    // 인풋 데이터가 블록 사이즈보다 작게 남았나요?
     n1 = min(n, (fbn + 1) * BSIZE - off);
+
     rsect(x, buf);
+    // 들어오는 데이터 무조건 한블럭씩 주는게아니라, 블럭에 남은공간 있으면 쓴다.
+    // 여기도 오프셋으로 작성할 위치 조절함
     bcopy(p, buf + off - (fbn * BSIZE), n1);
     wsect(x, buf);
     n -= n1;

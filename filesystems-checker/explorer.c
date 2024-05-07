@@ -16,8 +16,6 @@ static void* __log_sector_address;
 // [ boot block | super block | log | inode blocks |
 //                                          free bit map | data blocks]
 
-#define NINODES 200
-
 
 block_t* init_explorer(void* base_address, struct superblock* sb)
 {
@@ -37,7 +35,7 @@ block_t* init_explorer(void* base_address, struct superblock* sb)
     assert (__bitmap_sector_address == __inode_sector_address + ninodeblocks * BSIZE);
     
 
-    int nbitmap = FSSIZE/(BSIZE*8) + 1;
+    int nbitmap = FSSIZE / (BSIZE*8) + 1;
     __data_sector_address = bp + sb->bmapstart + nbitmap;
     assert (__data_sector_address == __bitmap_sector_address + nbitmap * BSIZE); 
     
