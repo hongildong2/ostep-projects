@@ -11,13 +11,13 @@ int validate_inode(struct superblock* sb, struct dinode* inode); // 1 : validate
 int mark_fbn_bitmap(int fbn); // In this function, if already marked, violation 7
 
 // refermap, compare with inode_map
-int mark_refer_countmap(struct dirent* dir_ent);
+void mark_refer_countmap(struct dirent* dir_ent);
 
 
 // traverse inode sector, compare with ref countmap
-int validate_ref_count(int type, struct dinode* inode);
+void validate_ref_count(struct dinode* inode);
 
 // traverse image bitmap, compare with fbn_bitmap
-int validate_bitmap(char* bitmap_sector);
+void validate_bitmap(char* bitmap_sector);
 
 #endif /* __VALIDATOR_H__ */

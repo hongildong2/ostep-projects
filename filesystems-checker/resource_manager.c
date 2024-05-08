@@ -27,16 +27,20 @@ void register_mmap(void* mp, size_t size)
 
 void release_resources()
 {
-    if (s_fd != 0) {
-        if (close(s_fd) != 0) {
+    if (s_fd != 0)
+    {
+        if (close(s_fd) != 0)
+        {
             fprintf(stderr, "FILE CLOSE ERROR\n");
             
         }
         s_fd = 0;
     }
 
-    if (s_mmap_p != NULL && s_mmap_p != MAP_FAILED) {
-        if (munmap(s_mmap_p, s_mmap_size) != 0) {
+    if (s_mmap_p != NULL && s_mmap_p != MAP_FAILED)
+    {
+        if (munmap(s_mmap_p, s_mmap_size) != 0)
+        {
             fprintf(stderr, "MUNMAP ERROR\n");
         }
         s_mmap_p = NULL;

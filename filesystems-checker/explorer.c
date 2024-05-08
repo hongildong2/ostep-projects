@@ -45,16 +45,20 @@ block_t* init_explorer(void* base_address, struct superblock* sb)
 
 void* fbn_to_user_address(int fbn)
 {  
-    assert (__base_address != NULL);
-
-    
-    return NULL;
+    assert (__base_address != NULL); 
+    int offset_in_byte = BSIZE * fbn;
+    return __data_sector_address + offset_in_byte;
 }
 
 struct dinode* inode_num_to_user_address(int inode_num)
 {
     assert (__base_address != NULL);
+    return (struct dinode*)__inode_sector_address + inode_num;
+}
 
-    // convert..
-    return NULL;
+int inode_user_address_to_inode_num(struct dinode* inode)
+{
+    // Get block number that contains inode.
+    // inum = inode - (struct dinode*)inode sector start address;
+    return inode - (struct dinode*)__inode_sector_address;
 }

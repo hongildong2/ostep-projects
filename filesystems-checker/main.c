@@ -54,8 +54,8 @@ int main(int argc, char* argv[])
 
     // root inode number is 1, thus starting at disk location 0x00004040, 0x00004000 에는 inode 0번 자리인데 그런건 없음
     uint inodes_count = sb->ninodes;
-    struct dinode* inode_p = (void*) (bp + sb->inodestart); // fucking segfault 아마 어제는 0참조한듯
-    struct dinode* root_inode = inode_p + 1; // to inode number 1, inode number 0, 블록시작자리에는 아무것도 없어서 어제 0 참조함
+    struct dinode* inode_sector_p = (void*) (bp + sb->inodestart); // fucking segfault 아마 어제는 0참조한듯
+    struct dinode* root_inode = inode_sector_p + 1; // to inode number 1, inode number 0, 블록시작자리에는 아무것도 없어서 어제 0 참조함
 
     struct dirent* addrs = (struct dirent*)root_inode->addrs; // contains inode's data block's file block number
     // TODO : root inode verification
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
         uint inode_number = dequeue();
         struct dinode* inode = inode_num_to_user_address(inode_number);
 
-        validate_inode(inode);
+        validate_inode(sb, inode);
 
 
         struct dirent** entries;
@@ -102,12 +102,12 @@ int main(int argc, char* argv[])
     }
     
     // traverse inode sector and validate
-    // validate_ref_count(int type, struct dinode *inode);
+    validate_ref_count(inode_sector_p);
 
     
     // validate bitmap consistency
-    char* bmap_p = (char*) (bp + sb->bmapstart);
-    validate_bitmap(bmap_p);
+    char* bmap_sector_p = (char*) (bp + sb->bmapstart);
+    validate_bitmap(bmap_sector_p);
 
     // ??
     uint data_block_count = sb->nblocks;
