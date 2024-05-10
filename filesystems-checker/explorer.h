@@ -9,5 +9,9 @@ void* fbn_to_user_address(int fbn);
 struct dinode* inode_num_to_user_address(int inode_num);
 int inode_user_address_to_inode_num(struct dinode* inode);
 
+// inode's addrs starts from index 1. IDK why.
+uint* get_offsetted_fbns(uint addrs[NDIRECT + 1]);
+
+
 
 #endif /* EXPLORER_H__ */

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdio.h> 
 
 #include "validator.h"
 #include "explorer.h"
@@ -12,37 +13,40 @@ int __validate_inum(int inum);
 
 // inode on traverse
  // 1 : validate type, 2 : validate address, 4 : validate dir, 5 : bitmap lookup, 10 : when dir, not valid inode
-int validate_inode(struct superblock* sb, struct dinode* inode)
+int validate_inode(struct superblock* sb, struct dinode* inode, uint inum)
 {
     assert (sb != NULL && inode != NULL);
     // 1. valid file type
     {
         if (inode->type != T_FILE && inode->type != T_DIR && inode->type != T_DEV)
         {
-            exit_on_failure("ERROR: bad inode.");
+            exit_on_failure("ERROR: bad inode");
         }
     }
 
     // 2. 0 < fbn < file block count
     {
         int fbn_count = sb->nblocks;
-        uint* addrs = inode->addrs;
-        
+        uint* addrs = get_offsetted_fbns(inode->addrs);
 
-        // direct entry check
-        while (addrs != 0)
+        for (int i = 0; i < NDIRECT; ++i)
         {
-            if (*addrs <= 0 || *addrs >= fbn_count)
+            uint fbn = addrs[i];
+            if (fbn == 0)
+            {
+                break;
+            }
+            if (fbn < 0 || fbn >= fbn_count)
             {
                 exit_on_failure("ERROR: bad direct address in inode.");
             }
 
-            if (mark_fbn_bitmap(*addrs) != 0)
+            if (mark_fbn_bitmap(fbn) != 0)
             {
                 exit_on_failure("ERROR: direct address used more than once.");
             }
-            addrs++;
         }
+    
 
         // indirect check
         // look into inode size, i have to decide this file has INDIRECT fbns or not
@@ -55,30 +59,30 @@ int validate_inode(struct superblock* sb, struct dinode* inode)
         }
 
         // validate INDIRECT and its entries
-        for (int i = 0; i < indirect_count; ++i)
+        for (int i = 1; i < indirect_count + 1; ++i)
         {
-            uint indirects_fbn = addrs[i];
-            if (mark_fbn_bitmap(indirects_fbn) != 0)
-            {
-                exit_on_failure("ERROR: indirect address used more than once.");
-            }
+            uint indirects_fbn = addrs[i]; // 얘도 1부터?
 
             // fbn 가서 거기있는 fbn들도 순회 해야함
             uint* indirected_fbns = fbn_to_user_address(indirects_fbn);
-
+            indirected_fbns = get_offsetted_fbns(indirected_fbns);
             assert (indirected_fbns != NULL);
-            while (indirected_fbns != 0)
+            for (int i = 0; i < NDIRECT; ++i)
             {
-                if (*indirected_fbns <= 0 || *indirected_fbns >= fbn_count)
+                uint fbn = indirected_fbns[i];
+                if (fbn == 0)
                 {
-                    exit_on_failure("ERROR: bad indirect address in inode.");
+                    break;
+                }
+                if (fbn < 0 || fbn >= fbn_count)
+                {
+                    exit_on_failure("ERROR: bad direct address in inode.");
                 }
 
-                if (mark_fbn_bitmap(*indirected_fbns) != 0)
+                if (mark_fbn_bitmap(fbn) != 0)
                 {
-                    exit_on_failure("ERROR: indirect address used more than once.");
+                    exit_on_failure("ERROR: direct address used more than once.");
                 }
-                indirected_fbns++;
             }
         }
     }
@@ -92,12 +96,11 @@ INODE_FBN_CHECK_DONE:
             goto INODE_DIR_CHECK_DONE;
         }
 
-        uint* dirent_fbns = inode->addrs;
+        uint* dirent_fbns = get_offsetted_fbns(inode->addrs);
         struct dirent* entries = fbn_to_user_address(*dirent_fbns);
-        int inum = inode_user_address_to_inode_num(inode);
             
         // first . entry
-        struct dirent dot_entry = *entries; 
+        struct dirent dot_entry = *(entries); 
         if (dot_entry.inum != inum || dot_entry.name[0] != '.' || dot_entry.name[1] != '\0')
         {
             exit_on_failure("ERROR: directory not properly formmated.");
@@ -109,6 +112,7 @@ INODE_FBN_CHECK_DONE:
         if (entries != 0)
         {
             struct dirent dotdot_entry = *entries; // second entry
+            mark_refer_countmap(entries);
             if (dotdot_entry.name[0] != '.' && dotdot_entry.name[1] != '.' && dotdot_entry.name[2] != '\0')
             {
                 exit_on_failure("ERROR: directory not properly formmated.");
@@ -117,8 +121,9 @@ INODE_FBN_CHECK_DONE:
         entries++; 
         // to next entries
 
-        while (entries != 0)
+        while (entries->inum != 0)
         {
+            // TODO : consider INDIRECT dir entries using dir size
             mark_refer_countmap(entries);
             entries++;
         }
@@ -142,7 +147,7 @@ int mark_fbn_bitmap(int fbn)
 // refermap, compare with inode_map
 void mark_refer_countmap(struct dirent* dir_ent)
 {
-    assert (dir_ent == 0 && dir_ent->inum > 0 && dir_ent->inum < NINODES + 1); // bad dirent
+    assert (dir_ent != 0 && dir_ent->inum > 0 && dir_ent->inum < NINODES + 1); // bad dirent
     s_inode_refer_countmap[dir_ent->inum]++;
 }
 
@@ -150,40 +155,39 @@ void mark_refer_countmap(struct dirent* dir_ent)
 // traverse inode sector, compare with ref countmap
 void validate_ref_count(struct dinode* inode_sector)
 {
-    char* inode_sector_start_block = (char*)inode_sector;
-
     assert (inode_sector != NULL);
-    inode_sector++; // ignore inode 0 entry
-
-    int inode_sector_block_counts = NINODES * sizeof(struct dinode) / BSIZE + 1;
-    while (((char*) inode_sector) - inode_sector_start_block < inode_sector_block_counts * BSIZE)
+    for (int inum = 5; inum < NINODES; ++inum)
     {
-        if (inode_sector->type == 0)
+        struct dinode inode = inode_sector[inum];
+        if (inode.type == 0)
         {
-            inode_sector++; // Deleted or inum 0, advance to next sector
             continue;
         }
-        int inum = inode_user_address_to_inode_num(inode_sector);
-        int fs_ref_count = inode_sector->nlink;
+
+        ushort fs_ref_count = inode.nlink;
         int map_ref_count = s_inode_refer_countmap[inum];
 
         if (s_inode_refer_countmap[inum] == 0)
         {
-            exit_on_failure("ERROR: address used by inode but marked free in bitmap.");
+            // exit_on_failure("ERROR: address used by inode but marked free in bitmap.");
         }
 
-        // inconsistent
+        if (map_ref_count == 0 && fs_ref_count > 0)
+        {
+            printf("WARNING: orphan or dirty inode leaves here!! inode number : %d, type : %hu\n", inum, inode.type);
+            continue;
+        }
+
         if (fs_ref_count != map_ref_count)
         {
             exit_on_failure("ERROR: bad reference count for file.");
         }
 
         // normal directory, more than 1 link is invalid
-        if (inum != 1 && inode_sector->nlink > 1)
+        if (inum != 1 && inode.nlink > 1)
         {
             exit_on_failure("ERROR: directory appears more than once in file system.");
         }
-        inode_sector++; // advance to next sector
     }
 
 

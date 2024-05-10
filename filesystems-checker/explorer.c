@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "explorer.h"
 #include "types.h"
@@ -25,7 +26,8 @@ block_t* init_explorer(void* base_address, struct superblock* sb)
 
     __log_sector_address = bp + sb->logstart;
 
-    assert (__log_sector_address == sb + BSIZE); // log sector is 1 block after sb start address
+
+    assert (__log_sector_address == (void*)sb + BSIZE); // log sector is 1 block after sb start address
 
     __inode_sector_address = bp + sb->inodestart;
     assert (__inode_sector_address == __log_sector_address + sb->nlog * BSIZE); // inode sector is after log sector
@@ -46,7 +48,7 @@ block_t* init_explorer(void* base_address, struct superblock* sb)
 void* fbn_to_user_address(int fbn)
 {  
     assert (__base_address != NULL); 
-    int offset_in_byte = BSIZE * fbn;
+    char offset_in_byte = BSIZE * fbn;
     return __data_sector_address + offset_in_byte;
 }
 
@@ -61,4 +63,10 @@ int inode_user_address_to_inode_num(struct dinode* inode)
     // Get block number that contains inode.
     // inum = inode - (struct dinode*)inode sector start address;
     return inode - (struct dinode*)__inode_sector_address;
+}
+
+uint* get_offsetted_fbns(uint addrs[NDIRECT + 1])
+{
+    // is addrs in inode sector?
+    return addrs + 1;
 }

@@ -1,3 +1,5 @@
+#include <stdio.h>
+
 #include "queue.h"
 #include "assert.h"
 
@@ -23,7 +25,6 @@ int dequeue()
     int n = s_buffer[s_front];
     s_front = (s_front + 1) % MAX_NUMS;
     s_num_count--;
-
     return n;
 }
 
